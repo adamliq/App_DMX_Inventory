@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Draft for review |
+| **Status** | MVP built (v0.1.0), not yet run on a stack. See §14 |
 | **Date** | 2026-11-09 |
 | **Source** | *Splunk Cloud Ingest Processor (DMX): Inventory & App Integration Handover* |
 | **Target platform** | Splunk Cloud Platform, **Victoria experience**, with **Ingest Processor** enabled, **clustered search heads** (all confirmed) |
@@ -307,3 +307,31 @@ times.
    needed?
 5. Should change alerts go to email, Slack or ITSI? Who receives them?
 6. Is Edge Processor in use too, and should it be covered later?
+
+## 14. Build notes (v0.1.0)
+
+What's built follows this scope, with these differences:
+
+- **Built before Phase 0.** Endpoint paths, pagination parameters and
+  credential names are settings in `dmx_inventory.conf`. The response parser
+  accepts lists, `{items|results|entry|data|...}` objects and Splunk Atom-style
+  entries. Phase 0 is still required. Use `scripts/phase0_probe.sh` and
+  `| dmxcollect dry_run=t`.
+- **Setup page is instructions, not a form.** Writing to `storage/passwords`
+  from a dashboard needs custom JavaScript or a REST handler. Both add vetting
+  risk, so the token is stored with one `curl` call (README step 4). The setup
+  page shows whether a token is stored and recent runs.
+- **Session-key fallback.** If no token is stored, the command uses the
+  running user's session. That's useful for a first test as `sc_admin` and
+  answers Phase 0 assumption A6.
+- **Python 3.13+ / Splunk 10.2+.** Current AppInspect cloud checks require
+  `python.required = 3.13` or `3.14` for custom commands, and recommend Splunk
+  SDK 3.x (which needs Python 3.13).
+- **`dmx_inventory_user` role** isn't shipped in the app. Create it in Splunk
+  Cloud. The app's metadata already grants it read access.
+- **Schema drift** is reported per run (`new_keys` / `missing_keys` in
+  `dmx:collector`) with a disabled alert.
+- **Verification:** 64 offline tests, including an end-to-end subprocess run
+  against a fake splunkd. AppInspect `--mode precert --included-tags cloud`
+  shows 0 failures and 0 errors (4 informational warnings). The dashboards
+  haven't been rendered in a real Splunk yet.

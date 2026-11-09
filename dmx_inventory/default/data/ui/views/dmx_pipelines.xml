@@ -1,0 +1,165 @@
+<dashboard version="2" theme="light">
+  <label>DMX Inventory: Pipelines</label>
+  <description>Current pipelines. Select a row to see its SPL2 and change history.</description>
+  <definition><![CDATA[
+{
+  "title": "DMX Inventory: Pipelines",
+  "description": "Current pipelines. Select a row to see its SPL2 and change history.",
+  "visualizations": {
+    "viz_list": {
+      "type": "splunk.table",
+      "title": "Pipelines (select a row)",
+      "dataSources": {
+        "primary": "ds_list"
+      },
+      "options": {
+        "count": 20
+      },
+      "eventHandlers": [
+        {
+          "type": "drilldown.setToken",
+          "options": {
+            "tokens": [
+              {
+                "token": "pid",
+                "key": "row.object_id.value"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "viz_spl2": {
+      "type": "splunk.table",
+      "title": "SPL2 of selected pipeline",
+      "dataSources": {
+        "primary": "ds_spl2"
+      },
+      "options": {
+        "count": 20
+      }
+    },
+    "viz_hist": {
+      "type": "splunk.table",
+      "title": "Change history of selected pipeline",
+      "dataSources": {
+        "primary": "ds_hist"
+      },
+      "options": {
+        "count": 20
+      }
+    }
+  },
+  "dataSources": {
+    "ds_list": {
+      "type": "ds.search",
+      "name": "ds_list",
+      "options": {
+        "query": "| inputlookup dmx_pipelines_current_lookup | search name=\"$name_filter$\" | eval destinations=mvjoin(destination_ids, \", \") | table object_id name status source_filter destinations modified_time modified_by first_seen last_seen | sort name",
+        "queryParameters": {
+          "earliest": "-24h",
+          "latest": "now"
+        }
+      }
+    },
+    "ds_spl2": {
+      "type": "ds.search",
+      "name": "ds_spl2",
+      "options": {
+        "query": "| inputlookup dmx_pipelines_current_lookup | where object_id=\"$pid$\" | table name pipeline_spl2",
+        "queryParameters": {
+          "earliest": "-24h",
+          "latest": "now"
+        }
+      }
+    },
+    "ds_hist": {
+      "type": "ds.search",
+      "name": "ds_hist",
+      "options": {
+        "query": "`dmx_index` sourcetype=dmx:change object_type=pipeline object_id=\"$pid$\" | table _time change_type name changed_fields old_spl2 new_spl2 collection_id",
+        "queryParameters": {
+          "earliest": "$global_time.earliest$",
+          "latest": "$global_time.latest$"
+        }
+      }
+    }
+  },
+  "inputs": {
+    "input_time": {
+      "type": "input.timerange",
+      "title": "Time range",
+      "options": {
+        "token": "global_time",
+        "defaultValue": "-7d@h,now"
+      }
+    },
+    "input_name": {
+      "type": "input.text",
+      "title": "Name filter",
+      "options": {
+        "token": "name_filter",
+        "defaultValue": "*"
+      }
+    }
+  },
+  "defaults": {
+    "tokens": {
+      "default": {
+        "name_filter": {
+          "value": "*"
+        },
+        "pid": {
+          "value": "none-selected"
+        }
+      }
+    }
+  },
+  "layout": {
+    "type": "grid",
+    "options": {
+      "width": 1440
+    },
+    "structure": [
+      {
+        "item": "viz_list",
+        "type": "block",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "w": 1440,
+          "h": 400
+        }
+      },
+      {
+        "item": "viz_spl2",
+        "type": "block",
+        "position": {
+          "x": 0,
+          "y": 400,
+          "w": 1440,
+          "h": 300
+        }
+      },
+      {
+        "item": "viz_hist",
+        "type": "block",
+        "position": {
+          "x": 0,
+          "y": 700,
+          "w": 1440,
+          "h": 360
+        }
+      }
+    ],
+    "globalInputs": [
+      "input_time",
+      "input_name"
+    ]
+  }
+}
+]]></definition>
+  <meta type="hiddenElements"><![CDATA[
+{"hideEdit": false, "hideOpenInSearch": false, "hideExport": false}
+]]></meta>
+</dashboard>

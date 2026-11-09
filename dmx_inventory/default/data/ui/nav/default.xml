@@ -1,0 +1,9 @@
+<nav search_view="search">
+  <view name="dmx_overview" default="true" />
+  <view name="dmx_pipelines" />
+  <view name="dmx_destinations" />
+  <view name="dmx_datasets" />
+  <view name="dmx_changes" />
+  <view name="setup" />
+  <view name="search" />
+</nav>

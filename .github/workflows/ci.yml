@@ -1,0 +1,45 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.13", "3.14"]   # python.required in commands.conf
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install "pytest>=8"
+      - run: pytest -q tests
+
+  appinspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: sudo apt-get update && sudo apt-get install -y libmagic1
+      - run: pip install splunk-appinspect
+      - run: python tools/build_dashboards.py && git diff --exit-code -- dmx_inventory/default/data/ui/views
+      - run: echo "PKG=$(scripts/package.sh)" >> "$GITHUB_ENV"
+      - run: splunk-appinspect inspect "$PKG" --mode precert --included-tags cloud --output-file appinspect-report.json
+      - run: |
+          python - <<'PY'
+          import json, sys
+          r = json.load(open("appinspect-report.json"))
+          s = r["summary"]
+          print(s)
+          sys.exit(1 if s.get("failure", 0) or s.get("error", 0) else 0)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: appinspect-report
+          path: appinspect-report.json

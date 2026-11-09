@@ -1,0 +1,23 @@
+# Dashboards, lookups and macros: admins plus the dmx_inventory_user role.
+# Create dmx_inventory_user in Splunk Cloud (Settings > Roles or ACS) and give it
+# search access to the dmx_inventory index.
+[]
+access = read : [ admin, sc_admin, dmx_inventory_user ], write : [ admin, sc_admin ]
+export = none
+
+# Running the collector, its scheduled search and the stored token: admins only.
+[commands/dmxcollect]
+access = read : [ admin, sc_admin ], write : [ admin, sc_admin ]
+
+[savedsearches]
+access = read : [ admin, sc_admin ], write : [ admin, sc_admin ]
+
+[passwords]
+access = read : [ admin, sc_admin ], write : [ admin, sc_admin ]
+
+[views/setup]
+access = read : [ admin, sc_admin ], write : [ admin, sc_admin ]
+
+# The collector state collection holds the run lock; users don't need it.
+[collections/dmx_collector_state]
+access = read : [ admin, sc_admin ], write : [ admin, sc_admin ]
