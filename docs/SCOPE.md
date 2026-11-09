@@ -5,7 +5,7 @@
 | **Status** | Draft for review |
 | **Date** | 2026-11-09 |
 | **Source** | *Splunk Cloud Ingest Processor (DMX): Inventory & App Integration Handover* |
-| **Target platform** | Splunk Cloud Platform, **Victoria experience**, with **Ingest Processor** enabled (confirmed) |
+| **Target platform** | Splunk Cloud Platform, **Victoria experience**, with **Ingest Processor** enabled, **clustered search heads** (all confirmed) |
 | **Working app ID** | `dmx_inventory` (label: "DMX Inventory") |
 
 ---
@@ -62,7 +62,8 @@ should be built until the following are confirmed on the target stack:
 | A3 | A **non-`sc_admin`** role with specific capabilities can read them | Create a test role; add capabilities one at a time. | The service account needs `sc_admin`. Record this as an accepted risk. |
 | A4 | Response is paginated or unpaginated, and roughly how large it is | Check for `offset`/`count`/`next` fields and `total` in samples. | Adjust the collector. |
 | A5 | Pipeline objects carry a stable ID and a modified timestamp or version | Inspect samples. | Fall back to hashing the full object for change detection. |
-| A6 | `splunk-system-user` (the session key given to modular inputs) can **not** read DMX | Log the status code from inside the input. | If it can, the stored token isn't needed. Simpler and safer. |
+| A6 | The session key of the scheduled search's owner can **not** read DMX | Log the status code from inside the command. | If it can, the stored token isn't needed. Simpler and safer. |
+| A7 | DMX state is the same whichever cluster member calls the endpoint | Call the endpoint on two members and compare. | If not, state which member is authoritative; this would be unusual. |
 
 **Phase 0 output:** sample JSON for each endpoint, a confirmed auth model, the
 minimum role or capabilities, and a go/no-go decision.
@@ -78,36 +79,53 @@ minimum role or capabilities, and a go/no-go decision.
 ## 5. Architecture
 
 ```
- Splunk Cloud search head (Victoria experience, confirmed)
+ Splunk Cloud search head cluster (Victoria experience)
  ┌─────────────────────────────────────────────────────────────────┐
- │ dmx_inventory app                                               │
+ │ dmx_inventory app (replicated to every member)                  │
  │                                                                 │
- │  Setup page ──► storage/passwords  (service-account token)      │
- │                         │                                       │
- │  Modular input  ◄───────┘   interval: 15 min (configurable)     │
- │  "dmx_inventory://default"                                      │
- │     │  GET https://127.0.0.1:8089/services/v2/dmx/<type>        │
- │     │  (Authorization: Bearer <token>)                          │
- │     ├──► index=dmx_inventory  sourcetype=dmx:<type>  (snapshots)│
- │     ├──► index=dmx_inventory  sourcetype=dmx:change  (diffs)    │
- │     └──► KV store  dmx_<type>_current           (latest state)  │
+ │  Setup page ──► storage/passwords  (service-account token,      │
+ │                                     replicated across the SHC)  │
+ │                                                                 │
+ │  Scheduled search "DMX Inventory - Collect"  every 15 min       │
+ │  (SHC captain dispatches it: runs on ONE member per interval)   │
+ │     | dmxcollect                                                │
+ │        │  custom generating command                             │
+ │        │  GET https://127.0.0.1:8089/services/v2/dmx/<type>     │
+ │        │  (Authorization: Bearer <token>)                       │
+ │        ├──► index=dmx_inventory  sourcetype=dmx:<type>          │
+ │        ├──► index=dmx_inventory  sourcetype=dmx:change          │
+ │        ├──► index=dmx_inventory  sourcetype=dmx:collector       │
+ │        └──► KV store  dmx_<type>_current  (replicated)          │
  │                                                                 │
  │  Dashboards (Studio) ── search index + inputlookup KV store      │
  │  Saved searches: change alert, stale-collection alert           │
- │  (Optional) REST handler /dmx_inventory/refresh  (admin only)   │
  └─────────────────────────────────────────────────────────────────┘
 ```
 
 ### Why this pattern
-- **Modular input + index** (pattern 3 in the handover). Gives history and
-  auditability, doesn't need users to hold DMX privileges, and isolates the
-  internal-API dependency to one Python module.
-- **Service-account token in `storage/passwords`.** Modular inputs run as
-  `splunk-system-user`, which probably can't read DMX (see A6).
+- **Scheduled search, not a modular input.** The search heads are clustered.
+  A modular input in an app is installed on every member, so it could run on
+  several members at once and produce duplicate snapshots and change events.
+  The SHC scheduler sends each scheduled search to exactly one member per run,
+  so the collector runs once per interval with no locking code. This replaces
+  the modular input from the earlier draft.
+- **Custom generating command (`| dmxcollect`).** Holds all collection logic in
+  Python. It can also be run by hand by an admin ("refresh now"), which
+  replaces the optional REST handler. A KV store run lock (`dmx_collector_lock`,
+  expires after 10 minutes) stops a manual run overlapping a scheduled one.
+- **Index and history.** History and auditability, without needing users to
+  hold DMX rights. The internal-API dependency is isolated in one Python module.
+- **Service-account token in `storage/passwords`.** Replicated across the
+  cluster, so whichever member runs the search can read it. Scheduled searches
+  run as their owner, who probably can't read DMX (see A6).
 - **Dashboards read only from the index and KV store.** Dashboards never call
   the DMX API directly, so viewers need no elevated rights.
 - **No JavaScript calling the API from dashboards.** That would require each
   viewer to have DMX rights, and Splunk Cloud vetting discourages custom JS.
+- **Writes go through splunkd.** Events are sent with the SDK's
+  `index.submit()` (`receivers/simple`) from the member that ran the search.
+  They're forwarded to the indexers like any other search-head data. Very low
+  volume (one event per object per run), but it does count against licence.
 
 ## 6. App package layout
 
@@ -116,25 +134,25 @@ dmx_inventory/
 ├── app.manifest
 ├── default/
 │   ├── app.conf                 # id, version, label, is_configured, install
-│   ├── inputs.conf              # [dmx_inventory://default] interval=900, disabled=1
+│   ├── commands.conf            # dmxcollect → bin/dmxcollect.py (python3, chunked=true)
+│   ├── searchbnf.conf           # syntax/help for dmxcollect
+│   ├── authorize.conf           # role dmx_inventory_user; capability to run dmxcollect for admins only
 │   ├── indexes.conf             # NOT shipped on Cloud: index created via ACS/UI
 │   ├── props.conf               # KV_MODE=json, TIME_PREFIX, TRUNCATE=0 for dmx:*
 │   ├── collections.conf         # dmx_pipelines_current, dmx_destinations_current, dmx_datasets_current
 │   ├── transforms.conf          # lookup definitions for the KV collections
 │   ├── macros.conf              # `dmx_index` → index=dmx_inventory
-│   ├── savedsearches.conf       # change alert, stale-collection alert (disabled by default)
-│   ├── restmap.conf / web.conf  # only if the optional refresh endpoint is built
+│   ├── savedsearches.conf       # collect (every 15 min), change alert, stale-collection alert; all disabled by default
 │   └── data/ui/
 │       ├── nav/default.xml
 │       └── views/               # overview, pipelines, destinations, datasets, changes, setup
-├── metadata/default.meta        # read for all; write admin; inputs/passwords admin-only
-├── README/inputs.conf.spec
+├── metadata/default.meta        # read for all; write admin; dmxcollect/passwords admin-only
 ├── bin/
-│   ├── dmx_inventory.py         # modular input entry point
+│   ├── dmxcollect.py            # custom generating command (splunklib.searchcommands)
 │   └── dmx_inventory_lib/
 │       ├── client.py            # the ONLY module that knows DMX URLs and shapes
 │       ├── normalize.py         # raw object → flat event fields
-│       └── state.py             # KV store read/write, hashing, diff
+│       └── state.py             # KV store read/write, run lock, hashing, diff
 ├── lib/splunklib/               # vendored Splunk SDK for Python
 └── static/appIcon*.png
 ```
@@ -191,7 +209,7 @@ the diff baseline.
 | **Destinations** | Table plus "used by N pipelines"; flag destinations with no pipelines |
 | **Datasets** | Table of local and remote datasets and the processors that link to them |
 | **Change history** | Timeline of `dmx:change`; filter by type, object or time; side-by-side of old and new SPL2 via `content_hash` lookup |
-| **Setup** | Token entry (written to `storage/passwords`), interval, enable input |
+| **Setup** | Token entry (written to `storage/passwords`), schedule, enable the collect search |
 
 ## 9. Security & Splunk Cloud constraints
 
@@ -213,13 +231,18 @@ the diff baseline.
   (`acs apps install private --acs-legal-ack Y --app-package dmx_inventory.tgz`).
   Upload runs automated vetting. Needs an `sc_admin` user. No Splunk support
   ticket is needed for install or upgrades.
-- **Where inputs run (Victoria).** Modular inputs in a private app run on the
-  search head tier. That's the same host whose management port (`8089`) the
-  collector calls on loopback (assumption A2).
-- **Search head cluster.** If the stack's search heads are clustered, the input
-  may run on more than one member. The collector must take a KV store lock (or
-  run only on the captain) so each run happens once. Confirm the topology in
-  Phase 0.
+- **Search head cluster (confirmed).**
+  - The app is installed once and replicated to every member.
+  - Collection runs as a scheduled search, which the captain dispatches to one
+    member per interval. It calls DMX on that member's own loopback
+    management port (`127.0.0.1:8089`, assumption A2).
+  - `storage/passwords` and the KV store are replicated, so the token and
+    current-state tables are the same on every member.
+  - Schedule window: set `schedule_window = 5` so a busy scheduler can delay
+    the run slightly rather than skip it.
+  - Don't use `| collect` or `| outputlookup` inside the collect search. The
+    command writes to the index and KV store itself, so one run has one
+    consistent result.
 - **Permissions.** Dashboards and KV lookups shared to a `dmx_inventory_user`
   role. Inputs, setup and the optional REST endpoint are admin-only.
 
@@ -230,10 +253,10 @@ Rough estimates for one developer familiar with Splunk app development.
 | Phase | Deliverables | Estimate |
 |---|---|---|
 | **0. Spike** | Validate A1–A6; capture fixture JSON; go/no-go | 2–3 days |
-| **1. Collector MVP** | Repo skeleton, packaging, `client.py`, `normalize.py` (with secret scrubbing), modular input writing snapshots and `dmx:collector`; pytest on fixtures; AppInspect clean | 4–5 days |
+| **1. Collector MVP** | Repo skeleton, packaging, `client.py`, `normalize.py` (with secret scrubbing), `dmxcollect` command writing snapshots and `dmx:collector`, scheduled collect search, KV run lock; pytest on fixtures; AppInspect clean | 4–5 days |
 | **2. State & dashboards** | KV store, diff and `dmx:change`, five dashboards, setup page, saved-search alerts | 4–6 days |
 | **3. Hardening** | Pagination and retry/backoff, schema-drift detection (alert when unexpected fields appear or required ones go missing), admin docs, install on target stack, UAT | 3–4 days |
-| **Optional** | Admin "refresh now" REST handler; Edge Processor inventory; pipeline volume metrics | TBD |
+| **Optional** | Edge Processor inventory; pipeline volume metrics | TBD |
 
 **Total MVP: about 13–18 developer-days**, excluding vetting and approval wait
 times.
@@ -248,6 +271,8 @@ times.
 | R4 | Destination objects contain credentials | Secrets indexed | Mandatory scrubbing in `normalize.py` with unit tests. Review the Phase 0 samples for sensitive fields. |
 | R5 | Endpoints not reachable from the search head (A2) | Architecture invalid | Find out in Phase 0, before any build work. Fallback: external collector posting via HEC. |
 | R6 | Large SPL2 bodies exceed event limits | Truncated events | `TRUNCATE = 0` for `dmx:*`. Measure sizes in Phase 0. |
+| R7 | Duplicate runs on the search head cluster (manual run overlapping a scheduled one, or a scheduler retry) | Duplicate snapshots and false change events | One scheduled search, not a modular input. KV store run lock with expiry. Change events keyed on `collection_id`, so duplicates can be spotted. |
+| R8 | Scheduler skips the collect search when the cluster is busy | Gaps in history | `schedule_window`, a modest priority, and the stale-collection alert. |
 
 ## 12. Acceptance criteria (MVP)
 
@@ -263,11 +288,18 @@ times.
    the token or change inputs.
 6. If the token is revoked, the run logs an error in `dmx:collector` and the
    stale-collection alert fires.
+7. On the search head cluster, each interval produces exactly one
+   `collection_id`: `index=dmx_inventory sourcetype=dmx:collector | stats dc(host) count by collection_id`
+   shows `count = 1` for every run over 24 hours.
+8. Collection keeps running after the current cluster captain is restarted
+   or changes.
 
 ## 13. Open questions
 
-1. Target stack name and Splunk Cloud version. (Experience is confirmed as
-   Victoria, with Ingest Processor enabled.) Is the search head tier clustered?
+1. Target stack name and Splunk Cloud version. (Confirmed: Victoria,
+   Ingest Processor enabled, clustered search heads.) Is there also a separate
+   standalone search head (for example an ES search head) where the app should
+   or shouldn't be installed?
 2. Is `sc_admin` acceptable for the service account, or must least privilege
    be proven first?
 3. Retention requirement for `dmx_inventory` (audit-driven?).
