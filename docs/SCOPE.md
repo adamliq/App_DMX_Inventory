@@ -5,6 +5,7 @@
 | **Status** | Draft for review |
 | **Date** | 2026-11-09 |
 | **Source** | *Splunk Cloud Ingest Processor (DMX): Inventory & App Integration Handover* |
+| **Target platform** | Splunk Cloud Platform, **Victoria experience**, with **Ingest Processor** enabled (confirmed) |
 | **Working app ID** | `dmx_inventory` (label: "DMX Inventory") |
 
 ---
@@ -77,7 +78,7 @@ minimum role or capabilities, and a go/no-go decision.
 ## 5. Architecture
 
 ```
- Splunk Cloud search head (Victoria experience)
+ Splunk Cloud search head (Victoria experience, confirmed)
  ┌─────────────────────────────────────────────────────────────────┐
  │ dmx_inventory app                                               │
  │                                                                 │
@@ -207,8 +208,18 @@ the diff baseline.
 - **Vetting.** Python 3 only, no compiled binaries, no outbound network, no
   `eval`/`exec`, no hard-coded credentials, no custom JS. Must pass AppInspect
   with `cloud` tags before upload.
-- **Install path.** Private app upload via *Apps → Manage Apps → Upload*, or
-  ACS `apps/victoria` install. Needs an `sc_admin` user.
+- **Install path (Victoria).** Self-service private app install, either by
+  uploading in *Apps → Manage Apps → Upload* or with ACS
+  (`acs apps install private --acs-legal-ack Y --app-package dmx_inventory.tgz`).
+  Upload runs automated vetting. Needs an `sc_admin` user. No Splunk support
+  ticket is needed for install or upgrades.
+- **Where inputs run (Victoria).** Modular inputs in a private app run on the
+  search head tier. That's the same host whose management port (`8089`) the
+  collector calls on loopback (assumption A2).
+- **Search head cluster.** If the stack's search heads are clustered, the input
+  may run on more than one member. The collector must take a KV store lock (or
+  run only on the captain) so each run happens once. Confirm the topology in
+  Phase 0.
 - **Permissions.** Dashboards and KV lookups shared to a `dmx_inventory_user`
   role. Inputs, setup and the optional REST endpoint are admin-only.
 
@@ -255,7 +266,8 @@ times.
 
 ## 13. Open questions
 
-1. Target stack name, Splunk Cloud version and experience (Victoria assumed).
+1. Target stack name and Splunk Cloud version. (Experience is confirmed as
+   Victoria, with Ingest Processor enabled.) Is the search head tier clustered?
 2. Is `sc_admin` acceptable for the service account, or must least privilege
    be proven first?
 3. Retention requirement for `dmx_inventory` (audit-driven?).
