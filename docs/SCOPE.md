@@ -315,8 +315,8 @@ What's built follows this scope, with these differences:
 - **Built before Phase 0.** Endpoint paths, pagination parameters and
   credential names are settings in `dmx_inventory.conf`. The response parser
   accepts lists, `{items|results|entry|data|...}` objects and Splunk Atom-style
-  entries. Phase 0 is still required. Use `scripts/phase0_probe.sh` and
-  `| dmxcollect dry_run=t`.
+  entries. Phase 0 is still required. Use `scripts/phase0_probe.ps1`
+  (Windows) or `scripts/phase0_probe.sh`, then `| dmxcollect dry_run=t`.
 - **Setup page is instructions, not a form.** Writing to `storage/passwords`
   from a dashboard needs custom JavaScript or a REST handler. Both add vetting
   risk, so the token is stored with one `curl` call (README step 4). The setup

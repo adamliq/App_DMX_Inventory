@@ -118,8 +118,21 @@ class FakeSplunkd(BaseHTTPRequestHandler):
                 return self._send(401, b'{"messages":[{"type":"ERROR","text":"unauthorized"}]}')
             payload = st["dmx"].get(path.rsplit("/", 1)[1])
             if payload is None:
-                return self._send(404, b"{}")
+                return self._send(404, b'{"messages":[{"type":"ERROR","text":"Not Found"}]}')
+            if "offset" in query:  # honour offset/count like a well-behaved API
+                off, cnt = int(query["offset"][0]), int(query.get("count", ["100"])[0])
+                if isinstance(payload, list):
+                    payload = payload[off:off + cnt]
+                else:
+                    payload = dict(payload, items=payload["items"][off:off + cnt])
             return self._send(200, json.dumps(payload).encode())
+        if path == "/services/server/info":
+            return self._send(200, json.dumps({"entry": [{"name": "server-info", "content": {
+                "version": "10.2.2510", "serverName": "sh-i-123", "instance_type": "cloud"}}]}).encode())
+        if path == "/services/authentication/current-context":
+            return self._send(200, json.dumps({"entry": [{"name": "svc", "content": {
+                "username": "svc_dmx", "roles": ["sc_admin"],
+                "capabilities": ["search", "list_storage_passwords", "edit_ingest_processor"]}}]}).encode())
         return self._send(404, b'{"messages":[{"type":"ERROR","text":"not found"}]}')
 
     def do_GET(self):

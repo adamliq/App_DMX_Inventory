@@ -12,7 +12,37 @@ changes, and shows them in dashboards.
 > endpoint paths and response shapes come from the handover and are
 > **unconfirmed** (Phase 0 in the scope). They're configurable in
 > `dmx_inventory.conf`, and the parser accepts several common shapes. Run
-> `scripts/phase0_probe.sh` and `| dmxcollect dry_run=t` first.
+> the Phase 0 probe and `| dmxcollect dry_run=t` first.
+
+## Phase 0 probe (run before installing)
+
+Checks the DMX endpoints from your workstation and saves sample responses.
+It makes only `GET` requests. Your IP must be on the stack's ACS `search-api`
+allow list (port 8089).
+
+**Windows (PowerShell 5.1 or 7):**
+```powershell
+$env:SPLUNK_STACK = 'mystack'          # mystack.splunkcloud.com
+.\scripts\phase0_probe.ps1             # prompts for the token (hidden input)
+.\scripts\phase0_probe.ps1 -BasePath /services/<other path> -PageSize 5
+```
+If script execution is blocked, run it once with
+`powershell -ExecutionPolicy Bypass -File .\scripts\phase0_probe.ps1`.
+
+**Linux / macOS:** `SPLUNK_STACK=mystack SPLUNK_TOKEN=... scripts/phase0_probe.sh`
+(a shorter check).
+
+The PowerShell probe reports:
+- the Splunk version (the app needs 10.2 or later);
+- the token's user, roles and any DMX-related capabilities (A3);
+- for each endpoint: HTTP status, whether the app would recognise the
+  response shape (A1), the ID and modified-time fields (A5), whether
+  `offset`/`count` pagination works (A4), and the largest object size.
+
+It writes to `tests/fixtures/live/` (git-ignored): raw `<endpoint>.json` (may
+contain secrets: keep it local), `<endpoint>.scrubbed.json` with credential-like
+values redacted (review it before sharing), and `summary.json`. It exits with 0
+if every endpoint returned a recognised response, and 1 otherwise.
 
 ## How it works
 
@@ -96,7 +126,7 @@ Only `admin`/`sc_admin` can run the command or read the stored token
 
 ```bash
 pip install -r requirements-dev.txt
-pytest -q tests                        # 64 tests, no Splunk needed
+pytest -q tests                        # no Splunk needed; probe tests need pwsh
 python3 tools/build_dashboards.py      # regenerate Dashboard Studio views
 scripts/package.sh
 splunk-appinspect inspect dist/dmx_inventory-0.1.0.tgz --mode precert --included-tags cloud
@@ -114,6 +144,6 @@ dmx_inventory/            the Splunk app (this is what gets packaged)
   lib/splunklib/          Splunk SDK for Python 3.0.1 (Apache 2.0), AI extras removed
   default/                confs, dashboards, nav, setup page
 tests/                    pytest suite and synthetic fixtures
-scripts/                  package.sh, phase0_probe.sh
+scripts/                  package.sh, phase0_probe.ps1, phase0_probe.sh
 tools/                    dashboard generator
 ```

@@ -18,6 +18,23 @@ jobs:
       - run: pip install "pytest>=8"
       - run: pytest -q tests
 
+  powershell-probe:
+    # Runs scripts/phase0_probe.ps1 against the fake splunkd under both
+    # Windows PowerShell 5.1 and PowerShell 7.
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        shell: ["powershell", "pwsh"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install "pytest>=8"
+      - run: pytest -q tests/test_phase0_probe_ps1.py -rs
+        env:
+          DMX_TEST_PWSH: ${{ matrix.shell }}
+
   appinspect:
     runs-on: ubuntu-latest
     steps:
