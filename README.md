@@ -70,10 +70,10 @@ Scheduled search "DMX Inventory - Collect" (every 15 min, one SHC member per run
    or with ACS: `acs indexes create --name dmx_inventory --data-type event`.
 2. **Create the role** `dmx_inventory_user` (inherits `user`, search access to
    `dmx_inventory`) for people who should see the dashboards.
-3. **Build and upload the app:**
+3. **Upload the app.** The ready-built package is
+   [`releases/dmx_inventory-0.1.0.spl`](releases/dmx_inventory-0.1.0.spl):
    ```bash
-   scripts/package.sh        # -> dist/dmx_inventory-<version>.tgz
-   acs apps install private --acs-legal-ack Y --app-package dist/dmx_inventory-0.1.0.tgz
+   acs apps install private --acs-legal-ack Y --app-package releases/dmx_inventory-0.1.0.spl
    ```
    or *Apps > Manage Apps > Upload app*. Upload runs Splunk's vetting.
 4. **Store the service-account token** (a token for a user whose role can read
@@ -128,14 +128,21 @@ Only `admin`/`sc_admin` can run the command or read the stored token
 pip install -r requirements-dev.txt
 pytest -q tests                        # no Splunk needed; probe tests need pwsh
 python3 tools/build_dashboards.py      # regenerate Dashboard Studio views
-scripts/package.sh
-splunk-appinspect inspect dist/dmx_inventory-0.1.0.tgz --mode precert --included-tags cloud
+python3 tools/package.py              # rebuild releases/dmx_inventory-<version>.spl
+splunk-appinspect inspect releases/dmx_inventory-0.1.0.spl --mode precert --included-tags cloud
 ```
 
 Tests cover parsing, secret scrubbing, diffing, the lock, the chunked
 search-command protocol, and the splunklib adapters against a fake splunkd.
 One test runs `dmxcollect.py` as a subprocess exactly as splunkd would. CI
 (`.github/workflows/ci.yml`) runs the tests and the AppInspect cloud checks.
+
+The `.spl` build is reproducible (fixed timestamps, sorted entries), so the
+same source always gives the same file on any OS. After changing anything
+under `dmx_inventory/`, run `python3 tools/package.py` and commit the new
+`.spl`. CI fails if the committed package doesn't match the source. To
+release a new version, bump `version` in `default/app.conf` (both places)
+and `bin/dmx_inventory_lib/__init__.py`, then rebuild.
 
 ```
 dmx_inventory/            the Splunk app (this is what gets packaged)
@@ -144,6 +151,7 @@ dmx_inventory/            the Splunk app (this is what gets packaged)
   lib/splunklib/          Splunk SDK for Python 3.0.1 (Apache 2.0), AI extras removed
   default/                confs, dashboards, nav, setup page
 tests/                    pytest suite and synthetic fixtures
+releases/                 built .spl package (committed)
 scripts/                  package.sh, phase0_probe.ps1, phase0_probe.sh
-tools/                    dashboard generator
+tools/                    package.py (reproducible .spl build), dashboard generator
 ```

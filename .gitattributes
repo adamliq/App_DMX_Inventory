@@ -1,0 +1,4 @@
+# LF everywhere so the reproducible .spl build gives the same bytes on Windows.
+* text=auto eol=lf
+*.spl binary
+*.png binary

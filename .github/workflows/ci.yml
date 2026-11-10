@@ -45,7 +45,9 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y libmagic1
       - run: pip install splunk-appinspect
       - run: python tools/build_dashboards.py && git diff --exit-code -- dmx_inventory/default/data/ui/views
-      - run: echo "PKG=$(scripts/package.sh)" >> "$GITHUB_ENV"
+      - name: Committed .spl matches source
+        run: python tools/package.py --check
+      - run: echo "PKG=$(ls releases/dmx_inventory-*.spl)" >> "$GITHUB_ENV"
       - run: splunk-appinspect inspect "$PKG" --mode precert --included-tags cloud --output-file appinspect-report.json
       - run: |
           python - <<'PY'
