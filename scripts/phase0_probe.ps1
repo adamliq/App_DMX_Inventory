@@ -112,7 +112,8 @@ function Get-PropNames($Obj) {
 function Get-Prop($Obj, [string]$Name) {
     if ($null -eq $Obj) { return $null }
     $p = $Obj.PSObject.Properties[$Name]
-    if ($p) { return $p.Value }
+    # The leading comma stops PowerShell unwrapping a one-element array into its element.
+    if ($p) { return , $p.Value }
     return $null
 }
 

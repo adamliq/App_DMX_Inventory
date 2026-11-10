@@ -39,6 +39,8 @@ def iter_paths():
     for dirpath, dirnames, filenames in os.walk(APP_DIR):
         dirnames[:] = sorted(d for d in dirnames if d not in EXCLUDE_DIRS and not d.startswith("."))
         rel_dir = os.path.relpath(dirpath, ROOT).replace(os.sep, "/")
+        if not dirnames and not filenames:
+            continue  # git doesn't keep empty folders, so neither does the package
         yield rel_dir, None
         for name in sorted(filenames):
             if name.startswith(".") or name.endswith(".pyc") or name in EXCLUDE_FILES:
@@ -68,6 +70,16 @@ def build_bytes():
     return out.getvalue()
 
 
+def _contents(spl_bytes):
+    """Names, types, modes and file bytes: what matters, independent of zlib version."""
+    entries = []
+    with tarfile.open(fileobj=io.BytesIO(spl_bytes), mode="r:gz") as tar:
+        for m in tar.getmembers():
+            data = tar.extractfile(m).read() if m.isfile() else None
+            entries.append((m.name, m.type, m.mode, data))
+    return entries
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out-dir", default=os.path.join(ROOT, "releases"))
@@ -82,7 +94,7 @@ def main():
                 current = f.read()
         except FileNotFoundError:
             sys.exit("missing %s: run python3 tools/package.py" % os.path.relpath(path, ROOT))
-        if current != data:
+        if current != data and _contents(current) != _contents(data):
             sys.exit("%s is out of date: run python3 tools/package.py and commit it"
                      % os.path.relpath(path, ROOT))
         print("up to date:", os.path.relpath(path, ROOT))
