@@ -300,8 +300,9 @@ Write-Step '2. Identity, roles and capabilities (A3)'
 $r = Invoke-SplunkGet '/services/authentication/current-context' @{ output_mode = 'json' }
 if ($r.Status -eq 200) {
     $c = (ConvertFrom-JsonSafe $r.Body).entry[0].content
-    $roles = @(Get-Prop $c 'roles')
-    $caps = @(Get-Prop $c 'capabilities')
+    # Assign first: @(Get-Prop ...) would nest the array Get-Prop returns intact.
+    $roles = Get-Prop $c 'roles'; $roles = @($roles)
+    $caps = Get-Prop $c 'capabilities'; $caps = @($caps)
     $relevant = @($caps | Where-Object { $_ -match 'dmx|ingest|pipeline|data_?manag|processor|edge|destination' } | Sort-Object)
     $summary.identity = [ordered]@{ username = Get-Prop $c 'username'; roles = $roles; capability_count = $caps.Count; dmx_related_capabilities = $relevant }
     Write-Ok "User '$(Get-Prop $c 'username')', roles: $($roles -join ', ')"
