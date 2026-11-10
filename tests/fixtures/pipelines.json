@@ -1,0 +1,19 @@
+{
+  "total": 3,
+  "items": [
+    {"id": "p-001", "name": "mask_pii_web", "status": "deployed",
+     "spl2": "$pipeline = | from $source | eval email=replace(email, /.+@/, \"***@\") | into $destination;",
+     "partitions": [{"sourcetype": "access_combined"}],
+     "destinations": [{"id": "d-001"}],
+     "updatedAt": "2026-10-01T12:00:00Z", "updatedBy": "alice"},
+    {"id": "p-002", "name": "drop_debug", "status": "deployed",
+     "spl2": "$pipeline = | from $source | where level != \"DEBUG\" | into $destination;",
+     "partitions": [{"sourcetype": "app:log"}],
+     "destinations": ["d-002"],
+     "updatedAt": "2026-10-02T08:30:00Z", "updatedBy": "bob"},
+    {"id": "p-003", "name": "route_to_s3", "status": "draft",
+     "spl2": "$pipeline = | from $source | into $destination;",
+     "destinations": [{"id": "d-003"}],
+     "updatedAt": "2026-10-03T09:00:00Z", "updatedBy": "alice"}
+  ]
+}

@@ -1,0 +1,4 @@
+[
+  {"id": "ds-1", "name": "access_combined", "kind": "local"},
+  {"id": "ds-2", "name": "app_logs", "kind": "remote", "processor": "ip-1"}
+]

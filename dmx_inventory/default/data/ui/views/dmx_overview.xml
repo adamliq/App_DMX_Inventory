@@ -1,0 +1,241 @@
+<dashboard version="2" theme="light">
+  <label>DMX Inventory: Overview</label>
+  <description>Ingest Processor pipelines, destinations and datasets at a glance.</description>
+  <definition><![CDATA[
+{
+  "title": "DMX Inventory: Overview",
+  "description": "Ingest Processor pipelines, destinations and datasets at a glance.",
+  "visualizations": {
+    "viz_pipelines": {
+      "type": "splunk.singlevalue",
+      "title": "Pipelines",
+      "dataSources": {
+        "primary": "ds_pipelines"
+      }
+    },
+    "viz_destinations": {
+      "type": "splunk.singlevalue",
+      "title": "Destinations",
+      "dataSources": {
+        "primary": "ds_destinations"
+      }
+    },
+    "viz_datasets": {
+      "type": "splunk.singlevalue",
+      "title": "Datasets",
+      "dataSources": {
+        "primary": "ds_datasets"
+      }
+    },
+    "viz_changes": {
+      "type": "splunk.singlevalue",
+      "title": "Changes in range",
+      "dataSources": {
+        "primary": "ds_changes"
+      }
+    },
+    "viz_age": {
+      "type": "splunk.singlevalue",
+      "title": "Minutes since last successful collection",
+      "dataSources": {
+        "primary": "ds_age"
+      },
+      "options": {
+        "unit": "min"
+      }
+    },
+    "viz_timeline": {
+      "type": "splunk.column",
+      "title": "Changes over time",
+      "dataSources": {
+        "primary": "ds_timeline"
+      }
+    },
+    "viz_runs": {
+      "type": "splunk.table",
+      "title": "Collection runs",
+      "dataSources": {
+        "primary": "ds_runs"
+      },
+      "options": {
+        "count": 20
+      }
+    }
+  },
+  "dataSources": {
+    "ds_pipelines": {
+      "type": "ds.search",
+      "name": "ds_pipelines",
+      "options": {
+        "query": "| inputlookup dmx_pipelines_current_lookup | stats count",
+        "queryParameters": {
+          "earliest": "-24h",
+          "latest": "now"
+        }
+      }
+    },
+    "ds_destinations": {
+      "type": "ds.search",
+      "name": "ds_destinations",
+      "options": {
+        "query": "| inputlookup dmx_destinations_current_lookup | stats count",
+        "queryParameters": {
+          "earliest": "-24h",
+          "latest": "now"
+        }
+      }
+    },
+    "ds_datasets": {
+      "type": "ds.search",
+      "name": "ds_datasets",
+      "options": {
+        "query": "| inputlookup dmx_datasets_current_lookup | stats count",
+        "queryParameters": {
+          "earliest": "-24h",
+          "latest": "now"
+        }
+      }
+    },
+    "ds_changes": {
+      "type": "ds.search",
+      "name": "ds_changes",
+      "options": {
+        "query": "`dmx_index` sourcetype=dmx:change initial_load!=true | stats count",
+        "queryParameters": {
+          "earliest": "$global_time.earliest$",
+          "latest": "$global_time.latest$"
+        }
+      }
+    },
+    "ds_age": {
+      "type": "ds.search",
+      "name": "ds_age",
+      "options": {
+        "query": "`dmx_index` sourcetype=dmx:collector status=success earliest=-30d | stats max(_time) as t | eval minutes=round((now()-t)/60) | fields minutes",
+        "queryParameters": {
+          "earliest": "-24h",
+          "latest": "now"
+        }
+      }
+    },
+    "ds_timeline": {
+      "type": "ds.search",
+      "name": "ds_timeline",
+      "options": {
+        "query": "`dmx_index` sourcetype=dmx:change initial_load!=true | timechart count by change_type",
+        "queryParameters": {
+          "earliest": "$global_time.earliest$",
+          "latest": "$global_time.latest$"
+        }
+      }
+    },
+    "ds_runs": {
+      "type": "ds.search",
+      "name": "ds_runs",
+      "options": {
+        "query": "`dmx_index` sourcetype=dmx:collector | eval errors=mvappend('types.pipeline.error', 'types.destination.error', 'types.dataset.error') | table _time status auth_mode duration_ms host collection_id errors reason",
+        "queryParameters": {
+          "earliest": "$global_time.earliest$",
+          "latest": "$global_time.latest$"
+        }
+      }
+    }
+  },
+  "inputs": {
+    "input_time": {
+      "type": "input.timerange",
+      "title": "Time range",
+      "options": {
+        "token": "global_time",
+        "defaultValue": "-7d@h,now"
+      }
+    }
+  },
+  "defaults": {},
+  "layout": {
+    "type": "grid",
+    "options": {
+      "width": 1440
+    },
+    "structure": [
+      {
+        "item": "viz_pipelines",
+        "type": "block",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "w": 288,
+          "h": 130
+        }
+      },
+      {
+        "item": "viz_destinations",
+        "type": "block",
+        "position": {
+          "x": 288,
+          "y": 0,
+          "w": 288,
+          "h": 130
+        }
+      },
+      {
+        "item": "viz_datasets",
+        "type": "block",
+        "position": {
+          "x": 576,
+          "y": 0,
+          "w": 288,
+          "h": 130
+        }
+      },
+      {
+        "item": "viz_changes",
+        "type": "block",
+        "position": {
+          "x": 864,
+          "y": 0,
+          "w": 288,
+          "h": 130
+        }
+      },
+      {
+        "item": "viz_age",
+        "type": "block",
+        "position": {
+          "x": 1152,
+          "y": 0,
+          "w": 288,
+          "h": 130
+        }
+      },
+      {
+        "item": "viz_timeline",
+        "type": "block",
+        "position": {
+          "x": 0,
+          "y": 130,
+          "w": 1440,
+          "h": 300
+        }
+      },
+      {
+        "item": "viz_runs",
+        "type": "block",
+        "position": {
+          "x": 0,
+          "y": 430,
+          "w": 1440,
+          "h": 360
+        }
+      }
+    ],
+    "globalInputs": [
+      "input_time"
+    ]
+  }
+}
+]]></definition>
+  <meta type="hiddenElements"><![CDATA[
+{"hideEdit": false, "hideOpenInSearch": false, "hideExport": false}
+]]></meta>
+</dashboard>

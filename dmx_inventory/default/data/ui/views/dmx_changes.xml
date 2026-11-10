@@ -1,0 +1,163 @@
+<dashboard version="2" theme="light">
+  <label>DMX Inventory: Change history</label>
+  <description>Every detected add, modify and remove. Initial loads are excluded.</description>
+  <definition><![CDATA[
+{
+  "title": "DMX Inventory: Change history",
+  "description": "Every detected add, modify and remove. Initial loads are excluded.",
+  "visualizations": {
+    "viz_timeline": {
+      "type": "splunk.column",
+      "title": "Changes over time",
+      "dataSources": {
+        "primary": "ds_timeline"
+      }
+    },
+    "viz_list": {
+      "type": "splunk.table",
+      "title": "Changes",
+      "dataSources": {
+        "primary": "ds_list"
+      },
+      "options": {
+        "count": 20
+      }
+    }
+  },
+  "dataSources": {
+    "ds_timeline": {
+      "type": "ds.search",
+      "name": "ds_timeline",
+      "options": {
+        "query": "`dmx_index` sourcetype=dmx:change initial_load!=true object_type=\"$ctype$\" change_type=\"$cchange$\" | timechart count by object_type",
+        "queryParameters": {
+          "earliest": "$global_time.earliest$",
+          "latest": "$global_time.latest$"
+        }
+      }
+    },
+    "ds_list": {
+      "type": "ds.search",
+      "name": "ds_list",
+      "options": {
+        "query": "`dmx_index` sourcetype=dmx:change initial_load!=true object_type=\"$ctype$\" change_type=\"$cchange$\" | table _time object_type change_type name object_id changed_fields old_name collection_id | sort - _time",
+        "queryParameters": {
+          "earliest": "$global_time.earliest$",
+          "latest": "$global_time.latest$"
+        }
+      }
+    }
+  },
+  "inputs": {
+    "input_time": {
+      "type": "input.timerange",
+      "title": "Time range",
+      "options": {
+        "token": "global_time",
+        "defaultValue": "-7d@h,now"
+      }
+    },
+    "input_type": {
+      "type": "input.dropdown",
+      "title": "Object type",
+      "options": {
+        "token": "ctype",
+        "defaultValue": "*",
+        "items": [
+          {
+            "label": "All",
+            "value": "*"
+          },
+          {
+            "label": "pipeline",
+            "value": "pipeline"
+          },
+          {
+            "label": "destination",
+            "value": "destination"
+          },
+          {
+            "label": "dataset",
+            "value": "dataset"
+          }
+        ]
+      }
+    },
+    "input_change": {
+      "type": "input.dropdown",
+      "title": "Change type",
+      "options": {
+        "token": "cchange",
+        "defaultValue": "*",
+        "items": [
+          {
+            "label": "All",
+            "value": "*"
+          },
+          {
+            "label": "added",
+            "value": "added"
+          },
+          {
+            "label": "modified",
+            "value": "modified"
+          },
+          {
+            "label": "removed",
+            "value": "removed"
+          }
+        ]
+      }
+    }
+  },
+  "defaults": {
+    "tokens": {
+      "default": {
+        "ctype": {
+          "value": "*"
+        },
+        "cchange": {
+          "value": "*"
+        }
+      }
+    }
+  },
+  "layout": {
+    "type": "grid",
+    "options": {
+      "width": 1440
+    },
+    "structure": [
+      {
+        "item": "viz_timeline",
+        "type": "block",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "w": 1440,
+          "h": 280
+        }
+      },
+      {
+        "item": "viz_list",
+        "type": "block",
+        "position": {
+          "x": 0,
+          "y": 280,
+          "w": 1440,
+          "h": 480
+        }
+      }
+    ],
+    "globalInputs": [
+      "input_time",
+      "input_type",
+      "input_change"
+    ]
+  }
+}
+]]></definition>
+  <meta type="hiddenElements"><![CDATA[
+{"hideEdit": false, "hideOpenInSearch": false, "hideExport": false}
+]]></meta>
+</dashboard>

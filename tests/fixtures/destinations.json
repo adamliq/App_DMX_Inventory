@@ -1,0 +1,11 @@
+{
+  "items": [
+    {"id": "d-001", "name": "splunk_main", "type": "splunk_index", "index": "main"},
+    {"id": "d-002", "name": "splunk_app", "type": "splunk_index", "index": "app"},
+    {"id": "d-003", "name": "archive_s3", "type": "s3",
+     "settings": {"bucket": "corp-archive", "region": "eu-west-1",
+                  "accessKeyId": "AKIAEXAMPLE", "secretAccessKey": "SUPERSECRETVALUE",
+                  "credentials": {"sessionToken": "TOKENVALUE"}}},
+    {"id": "d-004", "name": "unused_hec", "type": "hec", "url": "https://hec.example.com", "hec_token": "HECTOKENVALUE"}
+  ]
+}

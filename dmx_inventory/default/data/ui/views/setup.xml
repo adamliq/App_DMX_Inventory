@@ -1,0 +1,55 @@
+<dashboard version="1.1" theme="light">
+  <label>Setup</label>
+  <description>Admin-only. How to connect the collector and check that it works.</description>
+  <row>
+    <panel>
+      <html>
+        <h2>1. Create the index</h2>
+        <p>Splunk Cloud apps can't create indexes. Create <code>dmx_inventory</code> (event index) in
+        <b>Settings &gt; Indexes</b> or with ACS: <code>acs indexes create --name dmx_inventory --data-type event</code>.</p>
+
+        <h2>2. Store the service-account token</h2>
+        <p>Create a token for a user whose role can read Ingest Processor configuration
+        (<b>Settings &gt; Tokens</b>). Store it in this app's secret storage from a machine allowed to reach the
+        stack's management port (<code>8089</code>, see the ACS IP allow list for <code>search-api</code>):</p>
+        <pre>curl -u &lt;admin_user&gt; https://&lt;stack&gt;.splunkcloud.com:8089/servicesNS/nobody/dmx_inventory/storage/passwords \
+  -d name=dmx_service_account -d realm=dmx_inventory --data-urlencode password@token.txt</pre>
+        <p>To rotate it, POST the new value to
+        <code>.../storage/passwords/dmx_inventory:dmx_service_account:</code> with <code>-d password=...</code>.
+        The token never appears in search results or logs. If no token is stored, the collector uses the
+        session of whoever runs it (fine for a first test as <code>sc_admin</code>).</p>
+
+        <h2>3. Test without writing anything</h2>
+        <p>Run <code>| dmxcollect dry_run=t</code> in Search. You should see one row per pipeline, destination and
+        dataset. An <code>error</code> column means the endpoint, token or role needs attention; the message says which.</p>
+
+        <h2>4. Run once, then schedule</h2>
+        <p>Run <code>| dmxcollect</code>, then enable the <b>DMX Inventory - Collect</b> scheduled search
+        (<b>Settings &gt; Searches, reports, and alerts</b>). Optionally enable the change, stale-collection and
+        schema-drift alerts after adding an alert action.</p>
+      </html>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Stored token (presence only)</title>
+      <table>
+        <search>
+          <query>| rest splunk_server=local /servicesNS/nobody/dmx_inventory/storage/passwords
+| search realm="dmx_inventory"
+| table username realm eai:acl.app updated</query>
+        </search>
+      </table>
+    </panel>
+    <panel>
+      <title>Recent collection runs</title>
+      <table>
+        <search>
+          <query>`dmx_index` sourcetype=dmx:collector | table _time status auth_mode duration_ms host reason</query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+        </search>
+      </table>
+    </panel>
+  </row>
+</dashboard>
